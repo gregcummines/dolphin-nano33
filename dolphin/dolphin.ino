@@ -129,7 +129,7 @@ BLEByteCharacteristic refillCharacteristic("AC3F15EB-DE6C-4938-AA89-F89BCE3647A2
 // Test Mode (diverts waste back to nutrient tank)
 BLEByteCharacteristic testModeEnabledCharacteristic("AC3F15EC-DE6C-4938-AA89-F89BCE3647A2", BLERead | BLEWrite); 
 
-
+bool bleConnected = false;
 /******************************************************
    Pump and solenoid hardware variables
 */
@@ -226,12 +226,14 @@ float temp2 = -300.0;
 float tempInsideControllerBox = -300.0;
 float humidity = -300.0;
 float pressure = -300.0;
-int waterLevel = -1;
+int waterLevel = 0;
 
 unsigned long tempConversionStartedMilli = 0;
 static const unsigned long DS18B20_TEMP_CONVERSION_TIME = 750;
 
 const bool debug = false;
+
+unsigned long internalLoopDelayForBLEMilli;
 
 void setup() {
   Serial.begin(9600);
@@ -241,7 +243,7 @@ void setup() {
     }
   }
 
-  Serial.println("Dolphin 2.0 bootup!");
+  log("Dolphin 2.0 bootup!");
 
   printDallasTempSensors();
 
@@ -266,9 +268,19 @@ void loop() {
 // It is CRITICAL that all functions in this loop execute FAST (< 200mS)
 void internalLoop() {
   processSolenoidAndPumpCommands();
-  processControlButtonCommands();
-  startTempConversion();
-  readTempSensorsAfterConversion();
+
+  // If the BLE central is connected, disable the buttons
+  // on the control panel. This is only being done because there
+  // seems to be a bug where if we read digital I/O pins 0-3 it locks 
+  // up BLE or prevents BLE central from connecting. 
+  if (!bleConnected) {
+    processControlButtonCommands();
+    
+    // The BLE bug needs these excluded as well...
+    startTempConversion();
+    readTempSensorsAfterConversion();
+  }
+  
   processDHT31Sensor();
   processWaterLevelSensor();
   processAlarm();
@@ -298,7 +310,7 @@ void processSolenoidAndPumpCommands() {
   // stop them (add any code needed here for future operations)
   if (cancel) {
     // Turn off all pumps/solenoid valves
-    Serial.println("Cancelling process...");
+    log("Cancelling process...");
     resetPumpsAndSolenoids();
   }
 
@@ -380,7 +392,7 @@ void processEmptyCommand() {
     // Start the empty cycle if the system is not performing another operation
     if (!emptyStarted && !isSystemBusy) {
 
-      Serial.println("Empty cycle started at " + String(millis()));
+      log("Empty cycle started");
 
       // Prevent other operations from occurring, except cancel
       isSystemBusy = true;
@@ -396,8 +408,8 @@ void processEmptyCommand() {
 
       // Set the timeout based on current level
       timeToWaitForWasteEmpty = getMaxTimeToWaitForEmptyBasedOnLevel();
-      Serial.println("Max time to wait for empty is " + String(timeToWaitForWasteEmpty) + "mS");
-      Serial.println("Empty cycle is turning on pump and solenoids...");
+      log("Max time to wait for empty is " + String(timeToWaitForWasteEmpty) + "mS");
+      log("Empty cycle is turning on pump and solenoids...");
       turnOnAllOutPumpAndSolenoidValves();
 
       // Remember the time so we can check back on the level from time to time
@@ -412,12 +424,12 @@ void processEmptyCommand() {
       if ((millis() - emptyLoopCheckLevelMilli > 1000) && !waterLevelHitEmptyTrigger && emptyStarted) {
         emptyLoopCheckLevelMilli = millis();
 
-        //Serial.println("Checking empty status...");
+        //log("Checking empty status...");
 
         // If we hit zero, set a trigger so we can wait to turn off pump/solenoid valve
         // until some time later because system is not completely empty yet
         if (waterLevel == TargetLevelEmpty) {
-          Serial.println("Water level has reached 0...");
+          log("Water level has reached 0...");
           // We are setting the flag so if it registers not empty next time
           // we are still treating the trigger as an empty from now on each
           // time loop gets called
@@ -431,7 +443,7 @@ void processEmptyCommand() {
       // If we detect a water level of 0, wait a little longer before shutting pump/solenoid valve off
       // because we may not be completely empty yet.
       if (waterLevelHitEmptyTrigger && emptyStarted && (millis() - emptyLoopHitZeroMilli > TimeToWaitAfterHitZero)) {
-        Serial.println("Timeout after water level 0 has been set, ending empty cycle...");
+        log("Timeout after water level 0 has been set, ending empty cycle...");
         turnOffAllOutPumpAndSolenoidValves();
 
         if (emptyTrigger) {
@@ -449,7 +461,7 @@ void processEmptyCommand() {
       // If we reached the maximum time allowed regardless of the water level, stop emptying
       if (((millis() - emptyLoopCheckTimeoutMilli) > timeToWaitForWasteEmpty) &&
           emptyStarted) {
-        Serial.println("Max timeout has occurred, ending empty cycle...");
+        log("Max timeout has occurred, ending empty cycle...");
         turnOffAllOutPumpAndSolenoidValves();
 
         emptyStarted = false;
@@ -470,7 +482,7 @@ void processFillCommand() {
   if (fillTrigger || (refillTrigger && emptyCompleted)) {
     if (!fillStarted && !isSystemBusy) {
       // Start the fill cycle
-      Serial.println("Fill started at " + String(millis()));
+      log("Fill started");
       fillStarted = true;
       isSystemBusy = true;
 
@@ -658,14 +670,14 @@ void processWaterLevelSensor() {
     lastTimeWaterLevelSensorRead = millis();
 
     forceProcessWaterLevelSensor();
-    //Serial.println("Analog: " + String(analogVal) + " Moving average " + String(movingAvgCalc.GetAverage()));          // debug value
+    //log("Analog: " + String(analogVal) + " Moving average " + String(movingAvgCalc.GetAverage()));          // debug value
   }
 }
 
 void printDallasTempSensors() {
   byte addr[8];
   byte i;
-  Serial.println("Finding temp sensors: ");
+  log("Finding temp sensors: ");
 
   while ( ds.search(addr)) {
     Serial.print("Address=");
@@ -724,6 +736,7 @@ void forceProcessWaterLevelSensor() {
     waterLevelLastReadMilli = millis();
 
     int oldWaterLevel = waterLevel;
+    int tmpWaterLevel = 0;
     // s1 is the sensor at the lowest level a
     byte s1 = gpioExpander.digitalRead(1);
     byte s2 = gpioExpander.digitalRead(2);
@@ -733,25 +746,25 @@ void forceProcessWaterLevelSensor() {
     byte s6 = gpioExpander.digitalRead(6);
     byte s7 = gpioExpander.digitalRead(7);
     if (s7 == 0) {
-      setWaterLevel(7);
+      tmpWaterLevel = 7;
     } else if (s6 == 0) {
-      setWaterLevel(6);
+      tmpWaterLevel = 6;
     } else if (s5 == 0) {
-      setWaterLevel(5);
+      tmpWaterLevel = 5;
     } else if (s4 == 0) {
-      setWaterLevel(4);
+      tmpWaterLevel = 4;
     } else if (s3 == 0) {
-      setWaterLevel(3);
+      tmpWaterLevel = 3;
     } else if (s2 == 0) {
-      setWaterLevel(2);
+      tmpWaterLevel = 2;
     } else if (s1 == 0) {
-      setWaterLevel(1);
+      tmpWaterLevel = 1;
     } else {
-      setWaterLevel(0);
+      tmpWaterLevel = 0;
     }
-    if (waterLevel != oldWaterLevel) {
-      Serial.println("Water level changed from " + String(oldWaterLevel) + " to " + String(waterLevel) + " at " + String(millis()));
-      invalidateDisplay = true;
+    if (tmpWaterLevel != oldWaterLevel) {
+      log("Water level changed from " + String(oldWaterLevel) + " to " + String(tmpWaterLevel));
+      setWaterLevel(tmpWaterLevel);
     }
   }
 }
@@ -783,7 +796,7 @@ float readTemperatureInFahrenheit(byte address[8]) {
   fahrenheit = celsius * 1.8 + 32.0;
   //Serial.print("  Temperature = ");
   //Serial.print(fahrenheit);
-  //Serial.println(" F");
+  //log(" F");
 
   return fahrenheit;
 }
@@ -794,6 +807,8 @@ void processControlButtonCommands() {
   upButtonState =   digitalRead(0);
   displayMenuButtonState = digitalRead(3);
 
+  // These functions check the current state against the last known state
+  // and also provide debouce support
   checkIfDownButtonIsPressed();
   checkIfUpButtonIsPressed();
   checkIfSelectButtonIsPressed();
@@ -826,7 +841,7 @@ void processDownButtonClick() {
     invalidateDisplay = true;
   }
 
-  //Serial.println("displayWindowIndex:" + String(displayWindowIndex) + ", displaySelectionIndex:" + String(displaySelectionIndex));
+  //log("displayWindowIndex:" + String(displayWindowIndex) + ", displaySelectionIndex:" + String(displaySelectionIndex));
 }
 
 void processUpButtonClick() {
@@ -839,12 +854,12 @@ void processUpButtonClick() {
     displaySelectionIndex--;
     invalidateDisplay = true;
   }
-  //Serial.println("displayWindowIndex:" + String(displayWindowIndex) + ", displaySelectionIndex:" + String(displaySelectionIndex));
+  //log("displayWindowIndex:" + String(displayWindowIndex) + ", displaySelectionIndex:" + String(displaySelectionIndex));
 }
 
 void processSelectButtonClick() {
   int menuIndex = displayWindowIndex + displaySelectionIndex;
-  Serial.println("processing " + menuItems[menuIndex].menuChoice);
+  log("processing " + menuItems[menuIndex].menuChoice);
 
   // First cancel any running operation and set menu state to off
   // for menu items that were not selected and clicked
@@ -901,19 +916,21 @@ void processMenuCommand(int menuIndex) {
   invalidateDisplay = true;
 }
 
-void setWaterLevel(int waterLevel) {
-  waterLevel = waterLevel;
-  waterLevelCharacteristic.writeValue(waterLevel);
+void setWaterLevel(int tmpWaterLevel) {
+  waterLevel = tmpWaterLevel;
+  waterLevelCharacteristic.writeValue(tmpWaterLevel);
+  invalidateDisplay = true;
 }
 
 void setRefillTrigger(bool enabled) {
+  log("setRefillTrigger called with " + String(enabled));
   if (enabled) {
     refillTrigger = true;
     emptyCompleted = false;
     updateMenuState(MenuId_Refill, 1); 
     refillCharacteristic.writeValue(1);   
   } else {
-    cancel = false; // This will reset the refillTrigger variable too
+    cancel = true; // This will reset the refillTrigger variable too
     updateMenuState(MenuId_Refill, 0);
     refillCharacteristic.writeValue(0);
   }
@@ -926,7 +943,7 @@ void setEmptyTrigger(bool enabled) {
     updateMenuState(MenuId_Drain, 1);
     emptyCharacteristic.writeValue(1);
   } else {
-    cancel = false; // This will reset the refillTrigger variable too
+    cancel = true; // This will reset the refillTrigger variable too
     updateMenuState(MenuId_Drain, 0);
     emptyCharacteristic.writeValue(0);
   }
@@ -938,7 +955,7 @@ void setFillTrigger(bool enabled) {
     updateMenuState(MenuId_Fill, 1);
     fillCharacteristic.writeValue(1);
   } else {
-    cancel = false; // This will reset the refillTrigger variable too
+    cancel = true; // This will reset the refillTrigger variable too
     updateMenuState(MenuId_Fill, 0);
     fillCharacteristic.writeValue(0);
   }
@@ -981,11 +998,11 @@ void processBLECommands() {
 
   // if a central is connected to peripheral:
   if (central) {
-    Serial.print("Connected to central: ");
+    log("Connected to central: " + central.address());
 
-    // print the central's MAC address:
-    Serial.println(central.address());
-
+    if (central.connected()) {
+      bleConnected = true;
+    }
     // while the central is still connected to peripheral:
     while (central.connected()) {
       // if the remote device wrote to the characteristic,
@@ -1070,12 +1087,16 @@ void processBLECommands() {
         }
       }
 
-      internalLoop();
+      //if (millis() - internalLoopDelayForBLEMilli > 5000) {
+        //internalLoopDelayForBLEMilli = millis();
+        //log("Running delay for internal loop");
+        internalLoop();
+      //}
     }
 
     // when the central disconnects, print it out:
-    Serial.print(F("Disconnected from central: "));
-    Serial.println(central.address());
+    log("Disconnected from central: " + central.address());
+    bleConnected = false;
   } // if (central)
 }
 
@@ -1110,15 +1131,14 @@ void updateDisplay() {
 void initializeBLE() {
   // begin initialization
   if (!BLE.begin()) {
-    Serial.println("starting BLE failed!");
-
+    log("starting BLE failed!");
     while (1);
   }
 
   // set advertised local name and service UUID:
   BLE.setLocalName("DolphinControl");
-  //BLE.setAdvertisedService(dolphinLowLevelControlService);
-  ///BLE.setAdvertisedService(dolphinHighLevelControlService);
+  BLE.setAdvertisedService(dolphinLowLevelControlService);
+  BLE.setAdvertisedService(dolphinHighLevelControlService);
   BLE.setAdvertisedService(dolphinAutomateControlService);
 
   // add the characteristics to the service
@@ -1134,7 +1154,7 @@ void initializeBLE() {
   dolphinHighLevelControlService.addCharacteristic(waterLevelCharacteristic);
 
   dolphinAutomateControlService.addCharacteristic(refillCharacteristic);
-
+  dolphinAutomateControlService.addCharacteristic(testModeEnabledCharacteristic);
   // add services
   BLE.addService(dolphinLowLevelControlService);
   BLE.addService(dolphinHighLevelControlService);
@@ -1166,11 +1186,11 @@ void initializeDHT31Sensor() {
 void initializeGpioExpander() {
   if (!gpioExpander.begin(SX1509_ADDRESS))
   {
-    Serial.println("Error: Can't initialize SX1509");
+    log("Error: Can't initialize SX1509");
     while (1);
   }
 
-  //Serial.println("Setting pin mode...");
+  //log("Setting pin mode...");
   gpioExpander.pinMode(0, OUTPUT);
   gpioExpander.digitalWrite(0, LOW);
   delay(10);
@@ -1208,7 +1228,7 @@ void checkIfDisplayMenuButtonIsPressed()
     lastDisplayMenuButtonState = displayMenuButtonState;
     if (displayMenuButtonState == 0)
     {
-      //Serial.println("Menu button pressed");
+      //log("Menu button pressed");
 
       displayMenu = !displayMenu;
       if (displayMenu) {
@@ -1401,4 +1421,8 @@ void initializePanelControlButtonInputs() {
   pinMode(2, INPUT_PULLUP);
   pinMode(1, INPUT_PULLUP);
   pinMode(0, INPUT_PULLUP);
+}
+
+void log(String logMsg) {
+  Serial.println("[" + String(millis()) + "]: " + logMsg);
 }
