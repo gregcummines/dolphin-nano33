@@ -405,8 +405,8 @@ void processEmptyCommand() {
     } else {
       // Empty cycle is running, so check status...
 
-      // Check empty status every 100 mS if we have not already detected empty
-      if ((millis() - emptyLoopCheckLevelMilli > 1000) && !waterLevelHitEmptyTrigger) {
+      // Check empty status every second if we have not already detected empty
+      if ((millis() - emptyLoopCheckLevelMilli > 1000) && !waterLevelHitEmptyTrigger && emptyStarted) {
         emptyLoopCheckLevelMilli = millis();
 
         //Serial.println("Checking empty status...");
@@ -427,7 +427,7 @@ void processEmptyCommand() {
 
       // If we detect a water level of 0, wait a little longer before shutting pump/solenoid valve off
       // because we may not be completely empty yet.
-      if (waterLevelHitEmptyTrigger && (millis() - emptyLoopHitZeroMilli > TimeToWaitAfterHitZero)) {
+      if (waterLevelHitEmptyTrigger && emptyStarted && (millis() - emptyLoopHitZeroMilli > TimeToWaitAfterHitZero)) {
         Serial.println("Timeout after water level 0 has been set, ending empty cycle...");
         turnOffAllOutPumpAndSolenoidValves();
 
@@ -444,7 +444,8 @@ void processEmptyCommand() {
       }
 
       // If we reached the maximum time allowed regardless of the water level, stop emptying
-      if (millis() - emptyLoopCheckTimeoutMilli > timeToWaitForWasteEmpty) {
+      if (((millis() - emptyLoopCheckTimeoutMilli) > timeToWaitForWasteEmpty) &&
+          emptyStarted) {
         Serial.println("Max timeout has occurred, ending empty cycle...");
         turnOffAllOutPumpAndSolenoidValves();
 
