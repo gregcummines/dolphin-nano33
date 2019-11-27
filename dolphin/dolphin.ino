@@ -116,7 +116,7 @@ BLEByteCharacteristic septicDivertSolenoidValveCharacteristic("C240FAD1-9C37-4D2
 // BLE  Characteristics for High Level Control - custom 128-bit UUID, read and writable by central
 //
 // Waste
-BLEByteCharacteristic wasteCharacteristic("4B28FA62-2D6C-4BE5-A11F-BEE8E83F1FA3", BLERead | BLEWrite);
+BLEByteCharacteristic emptyCharacteristic("4B28FA62-2D6C-4BE5-A11F-BEE8E83F1FA3", BLERead | BLEWrite);
 // Fill
 BLEByteCharacteristic fillCharacteristic("4B28FA63-2D6C-4BE5-A11F-BEE8E83F1FA3", BLERead | BLEWrite);
 // Water Level (Inches)
@@ -124,8 +124,11 @@ BLEByteCharacteristic waterLevelCharacteristic("4B28FA64-2D6C-4BE5-A11F-BEE8E83F
 
 // BLE  Characteristics for Automated Control - custom 128-bit UUID, read and writable by central
 //
-// Automate Waste and Fill
-BLEByteCharacteristic wasteAndFillCharacteristic("AC3F15EB-DE6C-4938-AA89-F89BCE3647A2", BLERead | BLEWrite);
+// Automate Waste and Fill (Refill)
+BLEByteCharacteristic refillCharacteristic("AC3F15EB-DE6C-4938-AA89-F89BCE3647A2", BLERead | BLEWrite);
+// Test Mode (diverts waste back to nutrient tank)
+BLEByteCharacteristic testModeEnabledCharacteristic("AC3F15EC-DE6C-4938-AA89-F89BCE3647A2", BLERead | BLEWrite); 
+
 
 /******************************************************
    Pump and solenoid hardware variables
@@ -630,48 +633,6 @@ void turnOffDivertBackToNutrientTankValve() {
   delay(10);
 }
 
-// General functions
-void sendCommand(String command) {
-  if (command == "wp-on") {                 // Waste pump
-    turnOnWastePumpTrigger = true;
-  } else if (command == "wp-off") {
-    turnOffWastePumpTrigger = true;
-  } else if (command == "wsv-on") {         // Waste pump solenoid valve
-    turnOnWasteSolenoidValveTrigger = true;
-  } else if (command == "wsv-off") {
-    turnOffWasteSolenoidValveTrigger = true;
-  } else if (command == "fp-on") {          // Fill pump
-    turnOnFillPumpTrigger = true;
-  } else if (command == "fp-off") {
-    turnOffFillPumpTrigger = true;
-  } else if (command == "fsv-on") {         // Fill pump solenoid valve
-    turnOnFillSolenoidValveTrigger = true;
-  } else if (command == "fsv-off") {
-    turnOffFillSolenoidValveTrigger = true;
-  } else if (command == "so-on") {          // Septic out valve
-    turnOnSepticOutValveTrigger = true;
-  } else if (command == "so-off") {
-    turnOffSepticOutValveTrigger = true;
-  } else if (command == "dbnt-on") {        // Divert back to nutrient tank valve
-    turnOnDivertBackToNutrientTankValveTrigger = true;
-  } else if (command == "dbnt-off") {
-    turnOffDivertBackToNutrientTankValveTrigger = true;
-  } else if (command == "empty") {
-    emptyTrigger = true;
-  } else if (command == "fill") {
-    fillTrigger = true;
-  } else if (command == "regenerate") {
-    // This should empty and then fill in one operation
-    refillTrigger = true;
-  } else if (command == "cancel") {
-    cancel = true;
-  } else if (command == "testModeOn") {
-    testModeEnabled = true;
-  } else if (command == "testModeOff") {
-    testModeEnabled = false;
-  }
-}
-
 void startTempConversion() {
   // Force a temperature sensor measurement every interval
   if (millis() > lastTimeTempSensorsRead + REFRESH_INTERVAL_TEMP_SENSOR) {
@@ -772,21 +733,21 @@ void forceProcessWaterLevelSensor() {
     byte s6 = gpioExpander.digitalRead(6);
     byte s7 = gpioExpander.digitalRead(7);
     if (s7 == 0) {
-      waterLevel = 7;
+      setWaterLevel(7);
     } else if (s6 == 0) {
-      waterLevel = 6;
+      setWaterLevel(6);
     } else if (s5 == 0) {
-      waterLevel = 5;
+      setWaterLevel(5);
     } else if (s4 == 0) {
-      waterLevel = 4;
+      setWaterLevel(4);
     } else if (s3 == 0) {
-      waterLevel = 3;
+      setWaterLevel(3);
     } else if (s2 == 0) {
-      waterLevel = 2;
+      setWaterLevel(2);
     } else if (s1 == 0) {
-      waterLevel = 1;
+      setWaterLevel(1);
     } else {
-      waterLevel = 0;
+      setWaterLevel(0);
     }
     if (waterLevel != oldWaterLevel) {
       Serial.println("Water level changed from " + String(oldWaterLevel) + " to " + String(waterLevel) + " at " + String(millis()));
@@ -910,43 +871,89 @@ void processMenuCommand(int menuIndex) {
   switch (menuItems[menuIndex].menuId) {
     case MenuId_Drain:
       if (menuItems[menuIndex].state == 0) {
-        emptyTrigger = true;
-        menuItems[menuIndex].state = 1;
+        setEmptyTrigger(true);
       } else {
-        cancel = true;
-        menuItems[menuIndex].state = 0;
+        setEmptyTrigger(false);
       }
       break;
     case MenuId_Fill:
       if (menuItems[menuIndex].state == 0) {
-        fillTrigger = true;
-        menuItems[menuIndex].state = 1;
+        setFillTrigger(true);
       } else {
-        cancel = true;
-        menuItems[menuIndex].state = 0;
+        setFillTrigger(false);
       }
       break;
     case MenuId_Refill:
       if (menuItems[menuIndex].state == 0) {
-        refillTrigger = true;
-        emptyCompleted = false;
-        menuItems[menuIndex].state = 1;
+        setRefillTrigger(true);
       } else {
-        cancel = true;
-        menuItems[menuIndex].state = 0;
+        setRefillTrigger(false);
       }
       break;
     case MenuId_TestMode:
       if (menuItems[menuIndex].state == 0) {
-        testModeEnabled = true;
-        menuItems[menuIndex].state = 1;
+        setTestModeEnabled(true);
       } else {
-        testModeEnabled = false;
-        menuItems[menuIndex].state = 0;
+        setTestModeEnabled(false);
       }
       break;
   }
   invalidateDisplay = true;
+}
+
+void setWaterLevel(int waterLevel) {
+  waterLevel = waterLevel;
+  waterLevelCharacteristic.writeValue(waterLevel);
+}
+
+void setRefillTrigger(bool enabled) {
+  if (enabled) {
+    refillTrigger = true;
+    emptyCompleted = false;
+    updateMenuState(MenuId_Refill, 1); 
+    refillCharacteristic.writeValue(1);   
+  } else {
+    cancel = false; // This will reset the refillTrigger variable too
+    updateMenuState(MenuId_Refill, 0);
+    refillCharacteristic.writeValue(0);
+  }
+}
+
+void setEmptyTrigger(bool enabled) {
+  if (enabled) {
+    emptyTrigger = true;
+    emptyCompleted = false;
+    updateMenuState(MenuId_Drain, 1);
+    emptyCharacteristic.writeValue(1);
+  } else {
+    cancel = false; // This will reset the refillTrigger variable too
+    updateMenuState(MenuId_Drain, 0);
+    emptyCharacteristic.writeValue(0);
+  }
+}
+
+void setFillTrigger(bool enabled) {
+  if (enabled) {
+    fillTrigger = true;
+    updateMenuState(MenuId_Fill, 1);
+    fillCharacteristic.writeValue(1);
+  } else {
+    cancel = false; // This will reset the refillTrigger variable too
+    updateMenuState(MenuId_Fill, 0);
+    fillCharacteristic.writeValue(0);
+  }
+}
+
+void setTestModeEnabled(bool enabled) {
+  if (enabled) {
+    testModeEnabled = true;
+    updateMenuState(MenuId_TestMode, 1);
+    testModeEnabledCharacteristic.writeValue(1);
+  } else {
+    testModeEnabled = false;
+    updateMenuState(MenuId_TestMode, 0);
+    testModeEnabledCharacteristic.writeValue(0);
+  }
 }
 
 void stopAlreadyRunningOtherFillEmptyRefillCommands(int menuIndex) {
@@ -985,91 +992,81 @@ void processBLECommands() {
       // use the value to control the GPIO:
       if (wastePumpCharacteristic.written()) {
         if (wastePumpCharacteristic.value()) {   // any value other than 0
-          Serial.println("LED on");
-
+          turnOnWastePumpTrigger = true;
         } else {                              // a 0 value
-          Serial.println(F("LED off"));
-
+          turnOffWastePumpTrigger = true;
         }
       }
 
       if (wasteSolenoidValveCharacteristic.written()) {
         if (wasteSolenoidValveCharacteristic.value()) {   // any value other than 0
-          Serial.println("LED on");
-
+          turnOnWasteSolenoidValveTrigger = true;
         } else {                              // a 0 value
-          Serial.println(F("LED off"));
-
+          turnOffWasteSolenoidValveTrigger = true;
         }
       }
 
       if (fillPumpCharacteristic.written()) {
         if (fillPumpCharacteristic.value()) {   // any value other than 0
-          Serial.println("LED on");
-
+          turnOnFillPumpTrigger = true;
         } else {                              // a 0 value
-          Serial.println(F("LED off"));
-
+          turnOffFillPumpTrigger = true;
         }
       }
 
       if (fillSolenoidValveCharacteristic.written()) {
         if (fillSolenoidValveCharacteristic.value()) {   // any value other than 0
-          Serial.println("LED on");
-
+          turnOnFillSolenoidValveTrigger = true;
         } else {                              // a 0 value
-          Serial.println(F("LED off"));
-
+          turnOffFillSolenoidValveTrigger = true;
         }
       }
 
       if (septicSolenoidValveCharacteristic.written()) {
         if (septicSolenoidValveCharacteristic.value()) {   // any value other than 0
-          Serial.println("LED on");
-
+          turnOnSepticOutValveTrigger = true;
         } else {                              // a 0 value
-          Serial.println(F("LED off"));
-
+          turnOffSepticOutValveTrigger = true;
         }
       }
 
       if (septicDivertSolenoidValveCharacteristic.written()) {
         if (septicDivertSolenoidValveCharacteristic.value()) {   // any value other than 0
-          Serial.println("LED on");
-
+          turnOnDivertBackToNutrientTankValveTrigger = true;
         } else {                              // a 0 value
-          Serial.println(F("LED off"));
-
+          turnOffDivertBackToNutrientTankValveTrigger = true;
         }
       }
 
-      if (wasteCharacteristic.written()) {
-        if (wasteCharacteristic.value()) {   // any value other than 0
-          Serial.println("4 on");
-
+      if (emptyCharacteristic.written()) {
+        if (emptyCharacteristic.value()) {   // any value other than 0
+          setEmptyTrigger(true);
         } else {
-          Serial.println(F("4 off"));
-
+          setEmptyTrigger(false);
         }
       }
 
       if (fillCharacteristic.written()) {
         if (fillCharacteristic.value()) {   // any value other than 0
-          Serial.println("5 on");
-
+          setFillTrigger(true);
         } else {
-          Serial.println(F("5 off"));
-
+          setFillTrigger(false);
         }
       }
 
-      if (wasteAndFillCharacteristic.written()) {
-        if (wasteAndFillCharacteristic.value()) {   // any value other than 0
-          Serial.println("LED on");
-
+      if (refillCharacteristic.written()) {
+        if (refillCharacteristic.value()) {   // any value other than 0
+          setRefillTrigger(true);
         } else {                              // a 0 value
-          Serial.println(F("LED off"));
+          setRefillTrigger(false);
+        }
+      }
 
+      if (testModeEnabledCharacteristic.written()) {
+        if (testModeEnabledCharacteristic.value()) {   // any value other than 0
+          setTestModeEnabled(true);
+        } else {                              // a 0 value
+          setTestModeEnabled(false);
         }
       }
 
@@ -1083,7 +1080,7 @@ void processBLECommands() {
 }
 
 void initializeWaterLevelSensor() {
-  waterLevel = 0;
+  setWaterLevel(0);
 }
 
 void initializeDisplay() {
@@ -1132,11 +1129,11 @@ void initializeBLE() {
   dolphinLowLevelControlService.addCharacteristic(septicSolenoidValveCharacteristic);
   dolphinLowLevelControlService.addCharacteristic(septicDivertSolenoidValveCharacteristic);
 
-  dolphinHighLevelControlService.addCharacteristic(wasteCharacteristic);
+  dolphinHighLevelControlService.addCharacteristic(emptyCharacteristic);
   dolphinHighLevelControlService.addCharacteristic(fillCharacteristic);
   dolphinHighLevelControlService.addCharacteristic(waterLevelCharacteristic);
 
-  dolphinAutomateControlService.addCharacteristic(wasteAndFillCharacteristic);
+  dolphinAutomateControlService.addCharacteristic(refillCharacteristic);
 
   // add services
   BLE.addService(dolphinLowLevelControlService);
@@ -1151,11 +1148,12 @@ void initializeBLE() {
   septicSolenoidValveCharacteristic.writeValue(0);
   septicDivertSolenoidValveCharacteristic.writeValue(0);
 
-  wasteCharacteristic.writeValue(0);
+  emptyCharacteristic.writeValue(0);
   fillCharacteristic.writeValue(0);
   waterLevelCharacteristic.writeValue(0);
 
-  wasteAndFillCharacteristic.writeValue(0);
+  refillCharacteristic.writeValue(0);
+  testModeEnabledCharacteristic.writeValue(0);
 
   // start advertising
   BLE.advertise();
