@@ -101,35 +101,34 @@ BLEService dolphinAutomateControlService("AC3F15EA-DE6C-4938-AA89-F89BCE3647A2")
 // BLE  Characteristics for Low Level Control - custom 128-bit UUID, read and writable by central
 //
 // Waste Pump
-BLEByteCharacteristic wastePumpCharacteristic("C240FACC-9C37-4D25-8CB5-64B8CB4EDFA2", BLERead | BLEWrite);
+BLEByteCharacteristic wastePumpCharacteristic("C240FACC-9C37-4D25-8CB5-64B8CB4EDFA2", BLERead | BLEWrite | BLENotify);
 // Waste Solenoid Valve
-BLEByteCharacteristic wasteSolenoidValveCharacteristic("C240FACD-9C37-4D25-8CB5-64B8CB4EDFA2", BLERead | BLEWrite);
+BLEByteCharacteristic wasteSolenoidValveCharacteristic("C240FACD-9C37-4D25-8CB5-64B8CB4EDFA2", BLERead | BLEWrite | BLENotify);
 // Fill Pump
-BLEByteCharacteristic fillPumpCharacteristic("C240FACE-9C37-4D25-8CB5-64B8CB4EDFA2", BLERead | BLEWrite);
+BLEByteCharacteristic fillPumpCharacteristic("C240FACE-9C37-4D25-8CB5-64B8CB4EDFA2", BLERead | BLEWrite | BLENotify);
 // Fill Solenoid Valve
-BLEByteCharacteristic fillSolenoidValveCharacteristic("C240FACF-9C37-4D25-8CB5-64B8CB4EDFA2", BLERead | BLEWrite);
+BLEByteCharacteristic fillSolenoidValveCharacteristic("C240FACF-9C37-4D25-8CB5-64B8CB4EDFA2", BLERead | BLEWrite | BLENotify);
 // Septic Solenoid Valve
-BLEByteCharacteristic septicSolenoidValveCharacteristic("C240FAD0-9C37-4D25-8CB5-64B8CB4EDFA2", BLERead | BLEWrite);
+BLEByteCharacteristic septicSolenoidValveCharacteristic("C240FAD0-9C37-4D25-8CB5-64B8CB4EDFA2", BLERead | BLEWrite | BLENotify);
 // Septic Divert Back to Nutrient Tank Solenoid Valve
-BLEByteCharacteristic septicDivertSolenoidValveCharacteristic("C240FAD1-9C37-4D25-8CB5-64B8CB4EDFA2", BLERead | BLEWrite);
+BLEByteCharacteristic septicDivertSolenoidValveCharacteristic("C240FAD1-9C37-4D25-8CB5-64B8CB4EDFA2", BLERead | BLEWrite | BLENotify);
 
 // BLE  Characteristics for High Level Control - custom 128-bit UUID, read and writable by central
 //
 // Waste
-BLEByteCharacteristic emptyCharacteristic("4B28FA62-2D6C-4BE5-A11F-BEE8E83F1FA3", BLERead | BLEWrite);
+BLEByteCharacteristic emptyCharacteristic("4B28FA62-2D6C-4BE5-A11F-BEE8E83F1FA3", BLERead | BLEWrite | BLENotify);
 // Fill
-BLEByteCharacteristic fillCharacteristic("4B28FA63-2D6C-4BE5-A11F-BEE8E83F1FA3", BLERead | BLEWrite);
+BLEByteCharacteristic fillCharacteristic("4B28FA63-2D6C-4BE5-A11F-BEE8E83F1FA3", BLERead | BLEWrite | BLENotify);
 // Water Level (Inches)
-BLEByteCharacteristic waterLevelCharacteristic("4B28FA64-2D6C-4BE5-A11F-BEE8E83F1FA3", BLERead);
+BLEByteCharacteristic waterLevelCharacteristic("4B28FA64-2D6C-4BE5-A11F-BEE8E83F1FA3", BLERead | BLENotify);
 
 // BLE  Characteristics for Automated Control - custom 128-bit UUID, read and writable by central
 //
 // Automate Waste and Fill (Refill)
-BLEByteCharacteristic refillCharacteristic("AC3F15EB-DE6C-4938-AA89-F89BCE3647A2", BLERead | BLEWrite);
+BLEByteCharacteristic refillCharacteristic("AC3F15EB-DE6C-4938-AA89-F89BCE3647A2", BLERead | BLEWrite | BLENotify);
 // Test Mode (diverts waste back to nutrient tank)
-BLEByteCharacteristic testModeEnabledCharacteristic("AC3F15EC-DE6C-4938-AA89-F89BCE3647A2", BLERead | BLEWrite); 
+BLEByteCharacteristic testModeEnabledCharacteristic("AC3F15EC-DE6C-4938-AA89-F89BCE3647A2", BLERead | BLEWrite | BLENotify); 
 
-bool bleConnected = false;
 /******************************************************
    Pump and solenoid hardware variables
 */
@@ -268,19 +267,9 @@ void loop() {
 // It is CRITICAL that all functions in this loop execute FAST (< 200mS)
 void internalLoop() {
   processSolenoidAndPumpCommands();
-
-  // If the BLE central is connected, disable the buttons
-  // on the control panel. This is only being done because there
-  // seems to be a bug where if we read digital I/O pins 0-3 it locks 
-  // up BLE or prevents BLE central from connecting. 
-  if (!bleConnected) {
-    processControlButtonCommands();
-    
-    // The BLE bug needs these excluded as well...
-    startTempConversion();
-    readTempSensorsAfterConversion();
-  }
-  
+  processControlButtonCommands();
+  startTempConversion();
+  readTempSensorsAfterConversion();
   processDHT31Sensor();
   processWaterLevelSensor();
   processAlarm();
@@ -587,61 +576,74 @@ void turnOffInPumpAndSolenoidValve() {
 
 void turnOnWastePump() {
   gpioExpander.digitalWrite(GpioExpanderPinWastePump, HIGH);
+  wastePumpCharacteristic.writeValue(1);
   delay(10);
 }
 
 void turnOffWastePump() {
   gpioExpander.digitalWrite(GpioExpanderPinWastePump, LOW);
+  wastePumpCharacteristic.writeValue(0);
   delay(10);
 }
 
 void turnOnWasteSolenoidValve() {
   gpioExpander.digitalWrite(GpioExpanderPinWasteSolenoid, HIGH);
+  wasteSolenoidValveCharacteristic.writeValue(1);
   delay(10);
 }
 
 void turnOffWasteSolenoidValve() {
   gpioExpander.digitalWrite(GpioExpanderPinWasteSolenoid, LOW);
+  wasteSolenoidValveCharacteristic.writeValue(0);
   delay(10);
 }
 
 void turnOnFillPump() {
   gpioExpander.digitalWrite(GpioExpanderPinFillPump, HIGH);
+  fillPumpCharacteristic.writeValue(1);
   delay(10);
 }
 
 void turnOffFillPump() {
   gpioExpander.digitalWrite(GpioExpanderPinFillPump, LOW);
+  fillPumpCharacteristic.writeValue(0);
   delay(10);
 }
 
 void turnOnFillSolenoidValve() {
   gpioExpander.digitalWrite(GpioExpanderPinFillSolenoid, HIGH);
+  fillSolenoidValveCharacteristic.writeValue(1);
   delay(10);
 }
 
 void turnOffFillSolenoidValve() {
   gpioExpander.digitalWrite(GpioExpanderPinFillSolenoid, LOW);
+  fillSolenoidValveCharacteristic.writeValue(0);
   delay(10);
 }
 
 void turnOnSepticOutValve() {
   gpioExpander.digitalWrite(GpioExpanderPinSepticSolenoid, HIGH);
+  septicSolenoidValveCharacteristic.writeValue(1);
+  
   delay(10);
 }
 
 void turnOffSepticOutValve() {
   gpioExpander.digitalWrite(GpioExpanderPinSepticSolenoid, LOW);
+  septicSolenoidValveCharacteristic.writeValue(0);
   delay(10);
 }
 
 void turnOnDivertBackToNutrientTankValve() {
   gpioExpander.digitalWrite(GpioExpanderPinDivertSolenoid, HIGH);
+  septicDivertSolenoidValveCharacteristic.writeValue(1);
   delay(10);
 }
 
 void turnOffDivertBackToNutrientTankValve() {
   gpioExpander.digitalWrite(GpioExpanderPinDivertSolenoid, LOW);
+  septicDivertSolenoidValveCharacteristic.writeValue(0);
   delay(10);
 }
 
@@ -1000,9 +1002,6 @@ void processBLECommands() {
   if (central) {
     log("Connected to central: " + central.address());
 
-    if (central.connected()) {
-      bleConnected = true;
-    }
     // while the central is still connected to peripheral:
     while (central.connected()) {
       // if the remote device wrote to the characteristic,
@@ -1096,7 +1095,6 @@ void processBLECommands() {
 
     // when the central disconnects, print it out:
     log("Disconnected from central: " + central.address());
-    bleConnected = false;
   } // if (central)
 }
 
