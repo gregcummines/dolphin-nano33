@@ -389,11 +389,7 @@ void processEmptyCommand() {
       emptyCompleted = false;
       waterLevelHitEmptyTrigger = false;
 
-      if (emptyTrigger) {
-        updateMenuState(MenuId_Drain, 1);
-      } else if (refillTrigger) {
-        updateMenuState(MenuId_Refill, 1);
-      }
+      stateChanged();
 
       // Set the timeout based on current level
       timeToWaitForWasteEmpty = getMaxTimeToWaitForEmptyBasedOnLevel();
@@ -435,15 +431,13 @@ void processEmptyCommand() {
         log("Timeout after water level 0 has been set, ending empty cycle...");
         turnOffAllOutPumpAndSolenoidValves();
 
-        if (emptyTrigger) {
-          updateMenuState(MenuId_Drain, 0);
-        } 
-
         emptyStarted = false;
         emptyCompleted = true;
         emptyTrigger = false;
         isSystemBusy = false;
         waterLevelHitEmptyTrigger = false;
+
+        stateChanged(); 
         
       }
 
@@ -458,7 +452,7 @@ void processEmptyCommand() {
         emptyTrigger = false;
         isSystemBusy = false;
 
-        updateMenuState(MenuId_Drain, 0);
+        stateChanged();
       }
     }
   }
@@ -479,12 +473,6 @@ void processFillCommand() {
       // effort here just in case something went wrong
       turnOffAllOutPumpAndSolenoidValves();
 
-      if (fillTrigger) {
-        updateMenuState(MenuId_Fill, 1);
-      } else if (refillTrigger) {
-        updateMenuState(MenuId_Refill, 1);
-      }
-
       // Set the timeout based on current level
       timeToWaitForNutrientFill = getMaxTimeToWaitForFillBasedOnLevel();
 
@@ -492,6 +480,8 @@ void processFillCommand() {
 
       fillLoopCheckMilli = millis();
       fillLoopStopMilli = millis();
+
+      stateChanged();
     } else {
       // Fill cycle has started, check for completion
 
@@ -503,16 +493,12 @@ void processFillCommand() {
         if (waterLevel == TargetLevelFull || (millis() - fillLoopStopMilli > timeToWaitForNutrientFill)) {
           turnOffInPumpAndSolenoidValve();
 
-          if (fillTrigger) {
-            updateMenuState(MenuId_Fill, 0);
-          } else if (refillTrigger) {
-            updateMenuState(MenuId_Refill, 0);
-          }
-
           fillStarted = false;
           fillTrigger = false;
           refillTrigger = false;
           isSystemBusy = false;
+
+          stateChanged();
         }
       }
     }
@@ -522,7 +508,6 @@ void processFillCommand() {
 void updateMenuState(int id, int state) {
   int menuIndex = getMenuIndexById(id);
   menuItems[menuIndex].state = state;
-  invalidateDisplay = true;
 }
 
 int getMaxTimeToWaitForEmptyBasedOnLevel() {
@@ -929,50 +914,46 @@ void setRefillTrigger(bool enabled) {
   if (enabled) {
     refillTrigger = true;
     emptyCompleted = false;
-    updateMenuState(MenuId_Refill, 1); 
     refillCharacteristic.writeValue(1);   
   } else {
     cancel = true; // This will reset the refillTrigger variable too
-    updateMenuState(MenuId_Refill, 0);
     refillCharacteristic.writeValue(0);
   }
+  stateChanged();
 }
 
 void setEmptyTrigger(bool enabled) {
   if (enabled) {
     emptyTrigger = true;
     emptyCompleted = false;
-    updateMenuState(MenuId_Drain, 1);
     emptyCharacteristic.writeValue(1);
   } else {
     cancel = true; // This will reset the refillTrigger variable too
-    updateMenuState(MenuId_Drain, 0);
     emptyCharacteristic.writeValue(0);
   }
+  stateChanged();
 }
 
 void setFillTrigger(bool enabled) {
   if (enabled) {
     fillTrigger = true;
-    updateMenuState(MenuId_Fill, 1);
     fillCharacteristic.writeValue(1);
   } else {
     cancel = true; // This will reset the refillTrigger variable too
-    updateMenuState(MenuId_Fill, 0);
     fillCharacteristic.writeValue(0);
   }
+  stateChanged();
 }
 
 void setTestModeEnabled(bool enabled) {
   if (enabled) {
     testModeEnabled = true;
-    updateMenuState(MenuId_TestMode, 1);
     testModeEnabledCharacteristic.writeValue(1);
   } else {
     testModeEnabled = false;
-    updateMenuState(MenuId_TestMode, 0);
     testModeEnabledCharacteristic.writeValue(0);
   }
+  stateChanged();
 }
 
 void stopAlreadyRunningOtherFillEmptyRefillCommands(int menuIndex) {
@@ -1012,6 +993,7 @@ void processBLECommands() {
         } else {                              // a 0 value
           turnOffWastePumpTrigger = true;
         }
+        stateChanged();
       }
 
       if (wasteSolenoidValveCharacteristic.written()) {
@@ -1020,6 +1002,7 @@ void processBLECommands() {
         } else {                              // a 0 value
           turnOffWasteSolenoidValveTrigger = true;
         }
+        stateChanged();
       }
 
       if (fillPumpCharacteristic.written()) {
@@ -1028,6 +1011,7 @@ void processBLECommands() {
         } else {                              // a 0 value
           turnOffFillPumpTrigger = true;
         }
+        stateChanged();
       }
 
       if (fillSolenoidValveCharacteristic.written()) {
@@ -1036,6 +1020,7 @@ void processBLECommands() {
         } else {                              // a 0 value
           turnOffFillSolenoidValveTrigger = true;
         }
+        stateChanged();
       }
 
       if (septicSolenoidValveCharacteristic.written()) {
@@ -1044,6 +1029,7 @@ void processBLECommands() {
         } else {                              // a 0 value
           turnOffSepticOutValveTrigger = true;
         }
+        stateChanged();
       }
 
       if (septicDivertSolenoidValveCharacteristic.written()) {
@@ -1052,6 +1038,7 @@ void processBLECommands() {
         } else {                              // a 0 value
           turnOffDivertBackToNutrientTankValveTrigger = true;
         }
+        stateChanged();
       }
 
       if (emptyCharacteristic.written()) {
@@ -1085,12 +1072,8 @@ void processBLECommands() {
           setTestModeEnabled(false);
         }
       }
-
-      //if (millis() - internalLoopDelayForBLEMilli > 5000) {
-        //internalLoopDelayForBLEMilli = millis();
-        //log("Running delay for internal loop");
-        internalLoop();
-      //}
+      
+      internalLoop();
     }
 
     // when the central disconnects, print it out:
@@ -1419,6 +1402,26 @@ void initializePanelControlButtonInputs() {
   pinMode(2, INPUT_PULLUP);
   pinMode(1, INPUT_PULLUP);
   pinMode(0, INPUT_PULLUP);
+}
+
+stateChanged() {
+  if (refillTrigger) {
+    updateMenuState(MenuId_Refill, 1);
+  } else if (emptyTrigger) {
+    updateMenuState(MenuId_Drain, 1);
+  } else if (fillTrigger) {
+    updateMenuState(MenuId, Fill, 1);
+  } else {
+    updateMenuState(MenuId_Drain, 0);
+    updateMenuState(MenuId_Fill, 0);
+    updateMenuState(MenuId_Empty, 0);
+  }
+  if (testModeEnabled) {
+    updateMenuState(MenuId_TestMode, 1);
+  } else {
+    updateMenuState(MenuId_TestMode, 0);
+  }
+  invalidateDisplay = true;
 }
 
 void log(String logMsg) {
