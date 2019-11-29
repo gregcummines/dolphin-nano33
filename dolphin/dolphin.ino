@@ -95,14 +95,14 @@ boolean invalidateDisplay = true;
    Bluetooth GATT variables
 */
 BLEService dolphinControlService("AC3F15EA-DE6C-4938-AA89-F89BCE3647A2"); // BLE Dolphin  Control Service
-// Waste
-BLEByteCharacteristic wasteCharacteristic("4B28FA62-2D6C-4BE5-A11F-BEE8E83F1FA3", BLERead | BLEWrite);
-// Fill
-BLEByteCharacteristic fillCharacteristic("4B28FA63-2D6C-4BE5-A11F-BEE8E83F1FA3", BLERead | BLEWrite);
+// Waste characteristic
+BLEBoolCharacteristic wasteCharacteristic("4B28FA62-2D6C-4BE5-A11F-BEE8E83F1FA3", BLERead | BLEWrite | BLENotify);
+// Fill characteristic
+BLEBoolCharacteristic fillCharacteristic("4B28FA63-2D6C-4BE5-A11F-BEE8E83F1FA3", BLERead | BLEWrite | BLENotify);
 // Water Level (Inches)
-BLEByteCharacteristic waterLevelCharacteristic("4B28FA64-2D6C-4BE5-A11F-BEE8E83F1FA3", BLERead);
+BLEBoolCharacteristic waterLevelCharacteristic("4B28FA64-2D6C-4BE5-A11F-BEE8E83F1FA3", BLERead | BLENotify);
 // Automate Waste and Fill (refill)
-BLEByteCharacteristic refillCharacteristic("AC3F15EB-DE6C-4938-AA89-F89BCE3647A2", BLERead | BLEWrite);
+BLEBoolCharacteristic refillCharacteristic("AC3F15EB-DE6C-4938-AA89-F89BCE3647A2", BLERead | BLEWrite | BLENotify);
 
 bool emptyTrigger = false;
 bool emptyStarted = false;
