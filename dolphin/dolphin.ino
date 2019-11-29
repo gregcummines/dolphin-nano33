@@ -94,59 +94,15 @@ boolean invalidateDisplay = true;
 /******************************************************
    Bluetooth GATT variables
 */
-BLEService dolphinLowLevelControlService("C240FACB-9C37-4D25-8CB5-64B8CB4EDFA2"); // BLE Dolphin Low Level Control Service
-BLEService dolphinHighLevelControlService("4B28FA61-2D6C-4BE5-A11F-BEE8E83F1FA3"); // BLE Dolphin High Level Control Service
-BLEService dolphinAutomateControlService("AC3F15EA-DE6C-4938-AA89-F89BCE3647A2"); // BLE Dolphin Automate Control Service
-
-// BLE  Characteristics for Low Level Control - custom 128-bit UUID, read and writable by central
-//
-// Waste Pump
-BLEByteCharacteristic wastePumpCharacteristic("C240FACC-9C37-4D25-8CB5-64B8CB4EDFA2", BLERead | BLEWrite);
-// Waste Solenoid Valve
-BLEByteCharacteristic wasteSolenoidValveCharacteristic("C240FACD-9C37-4D25-8CB5-64B8CB4EDFA2", BLERead | BLEWrite);
-// Fill Pump
-BLEByteCharacteristic fillPumpCharacteristic("C240FACE-9C37-4D25-8CB5-64B8CB4EDFA2", BLERead | BLEWrite);
-// Fill Solenoid Valve
-BLEByteCharacteristic fillSolenoidValveCharacteristic("C240FACF-9C37-4D25-8CB5-64B8CB4EDFA2", BLERead | BLEWrite);
-// Septic Solenoid Valve
-BLEByteCharacteristic septicSolenoidValveCharacteristic("C240FAD0-9C37-4D25-8CB5-64B8CB4EDFA2", BLERead | BLEWrite);
-// Septic Divert Back to Nutrient Tank Solenoid Valve
-BLEByteCharacteristic septicDivertSolenoidValveCharacteristic("C240FAD1-9C37-4D25-8CB5-64B8CB4EDFA2", BLERead | BLEWrite);
-
-// BLE  Characteristics for High Level Control - custom 128-bit UUID, read and writable by central
-//
+BLEService dolphinControlService("AC3F15EA-DE6C-4938-AA89-F89BCE3647A2"); // BLE Dolphin  Control Service
 // Waste
 BLEByteCharacteristic wasteCharacteristic("4B28FA62-2D6C-4BE5-A11F-BEE8E83F1FA3", BLERead | BLEWrite);
 // Fill
 BLEByteCharacteristic fillCharacteristic("4B28FA63-2D6C-4BE5-A11F-BEE8E83F1FA3", BLERead | BLEWrite);
 // Water Level (Inches)
 BLEByteCharacteristic waterLevelCharacteristic("4B28FA64-2D6C-4BE5-A11F-BEE8E83F1FA3", BLERead);
-
-// BLE  Characteristics for Automated Control - custom 128-bit UUID, read and writable by central
-//
-// Automate Waste and Fill
-BLEByteCharacteristic wasteAndFillCharacteristic("AC3F15EB-DE6C-4938-AA89-F89BCE3647A2", BLERead | BLEWrite);
-
-/******************************************************
-   Pump and solenoid hardware variables
-*/
-bool turnOnWastePumpTrigger = false;
-bool turnOffWastePumpTrigger = false;
-
-bool turnOnWasteSolenoidValveTrigger = false;
-bool turnOffWasteSolenoidValveTrigger = false;
-
-bool turnOnFillPumpTrigger = false;
-bool turnOffFillPumpTrigger = false;
-
-bool turnOnFillSolenoidValveTrigger = false;
-bool turnOffFillSolenoidValveTrigger = false;
-
-bool turnOnSepticOutValveTrigger = false;
-bool turnOffSepticOutValveTrigger = false;
-
-bool turnOnDivertBackToNutrientTankValveTrigger = false;
-bool turnOffDivertBackToNutrientTankValveTrigger = false;
+// Automate Waste and Fill (refill)
+BLEByteCharacteristic refillCharacteristic("AC3F15EB-DE6C-4938-AA89-F89BCE3647A2", BLERead | BLEWrite);
 
 bool emptyTrigger = false;
 bool emptyStarted = false;
@@ -301,72 +257,6 @@ void processSolenoidAndPumpCommands() {
 
   processEmptyCommand();
   processFillCommand();
-
-  /* The following triggers are for manual use and testing and will not be
-     normally used */
-
-  if (!fillStarted && !emptyStarted && !isSystemBusy) {
-
-    if (turnOnWastePumpTrigger == true) {
-      turnOnWastePump();
-      turnOnWastePumpTrigger = false;
-    }
-
-    if (turnOffWastePumpTrigger == true) {
-      turnOffWastePump();
-      turnOffWastePumpTrigger = false;
-    }
-
-    if (turnOnWasteSolenoidValveTrigger == true) {
-      turnOnWasteSolenoidValve();
-      turnOnWasteSolenoidValveTrigger = false;
-    }
-
-    if (turnOffWasteSolenoidValveTrigger == true) {
-      turnOffWasteSolenoidValve();
-      turnOffWasteSolenoidValveTrigger = false;
-    }
-
-    if (turnOnFillPumpTrigger == true) {
-      turnOnFillPump();
-      turnOnFillPumpTrigger = false;
-    }
-
-    if (turnOffFillPumpTrigger == true) {
-      turnOffFillPump();
-      turnOffFillPumpTrigger = false;
-    }
-
-    if (turnOnFillSolenoidValveTrigger == true) {
-      turnOnFillSolenoidValve();
-      turnOnFillSolenoidValveTrigger = false;
-    }
-
-    if (turnOffFillSolenoidValveTrigger == true) {
-      turnOffFillSolenoidValve();
-      turnOffFillSolenoidValveTrigger = false;
-    }
-
-    if (turnOnSepticOutValveTrigger == true) {
-      turnOnSepticOutValve();
-      turnOnSepticOutValveTrigger = false;
-    }
-
-    if (turnOffSepticOutValveTrigger == true) {
-      turnOffSepticOutValve();
-      turnOffSepticOutValveTrigger = false;
-    }
-
-    if (turnOnDivertBackToNutrientTankValveTrigger == true) {
-      turnOnDivertBackToNutrientTankValve();
-      turnOnDivertBackToNutrientTankValveTrigger = false;
-    }
-
-    if (turnOffDivertBackToNutrientTankValveTrigger == true) {
-      turnOffDivertBackToNutrientTankValve();
-      turnOffDivertBackToNutrientTankValveTrigger = false;
-    }
-  }
 }
 
 void processEmptyCommand() {
@@ -628,48 +518,6 @@ void turnOnDivertBackToNutrientTankValve() {
 void turnOffDivertBackToNutrientTankValve() {
   gpioExpander.digitalWrite(GpioExpanderPinDivertSolenoid, LOW);
   delay(10);
-}
-
-// General functions
-void sendCommand(String command) {
-  if (command == "wp-on") {                 // Waste pump
-    turnOnWastePumpTrigger = true;
-  } else if (command == "wp-off") {
-    turnOffWastePumpTrigger = true;
-  } else if (command == "wsv-on") {         // Waste pump solenoid valve
-    turnOnWasteSolenoidValveTrigger = true;
-  } else if (command == "wsv-off") {
-    turnOffWasteSolenoidValveTrigger = true;
-  } else if (command == "fp-on") {          // Fill pump
-    turnOnFillPumpTrigger = true;
-  } else if (command == "fp-off") {
-    turnOffFillPumpTrigger = true;
-  } else if (command == "fsv-on") {         // Fill pump solenoid valve
-    turnOnFillSolenoidValveTrigger = true;
-  } else if (command == "fsv-off") {
-    turnOffFillSolenoidValveTrigger = true;
-  } else if (command == "so-on") {          // Septic out valve
-    turnOnSepticOutValveTrigger = true;
-  } else if (command == "so-off") {
-    turnOffSepticOutValveTrigger = true;
-  } else if (command == "dbnt-on") {        // Divert back to nutrient tank valve
-    turnOnDivertBackToNutrientTankValveTrigger = true;
-  } else if (command == "dbnt-off") {
-    turnOffDivertBackToNutrientTankValveTrigger = true;
-  } else if (command == "empty") {
-    emptyTrigger = true;
-  } else if (command == "fill") {
-    fillTrigger = true;
-  } else if (command == "regenerate") {
-    // This should empty and then fill in one operation
-    refillTrigger = true;
-  } else if (command == "cancel") {
-    cancel = true;
-  } else if (command == "testModeOn") {
-    testModeEnabled = true;
-  } else if (command == "testModeOff") {
-    testModeEnabled = false;
-  }
 }
 
 void startTempConversion() {
@@ -981,68 +829,7 @@ void processBLECommands() {
 
     // while the central is still connected to peripheral:
     while (central.connected()) {
-      // if the remote device wrote to the characteristic,
-      // use the value to control the GPIO:
-      if (wastePumpCharacteristic.written()) {
-        if (wastePumpCharacteristic.value()) {   // any value other than 0
-          Serial.println("LED on");
-
-        } else {                              // a 0 value
-          Serial.println(F("LED off"));
-
-        }
-      }
-
-      if (wasteSolenoidValveCharacteristic.written()) {
-        if (wasteSolenoidValveCharacteristic.value()) {   // any value other than 0
-          Serial.println("LED on");
-
-        } else {                              // a 0 value
-          Serial.println(F("LED off"));
-
-        }
-      }
-
-      if (fillPumpCharacteristic.written()) {
-        if (fillPumpCharacteristic.value()) {   // any value other than 0
-          Serial.println("LED on");
-
-        } else {                              // a 0 value
-          Serial.println(F("LED off"));
-
-        }
-      }
-
-      if (fillSolenoidValveCharacteristic.written()) {
-        if (fillSolenoidValveCharacteristic.value()) {   // any value other than 0
-          Serial.println("LED on");
-
-        } else {                              // a 0 value
-          Serial.println(F("LED off"));
-
-        }
-      }
-
-      if (septicSolenoidValveCharacteristic.written()) {
-        if (septicSolenoidValveCharacteristic.value()) {   // any value other than 0
-          Serial.println("LED on");
-
-        } else {                              // a 0 value
-          Serial.println(F("LED off"));
-
-        }
-      }
-
-      if (septicDivertSolenoidValveCharacteristic.written()) {
-        if (septicDivertSolenoidValveCharacteristic.value()) {   // any value other than 0
-          Serial.println("LED on");
-
-        } else {                              // a 0 value
-          Serial.println(F("LED off"));
-
-        }
-      }
-
+      
       if (wasteCharacteristic.written()) {
         if (wasteCharacteristic.value()) {   // any value other than 0
           Serial.println("4 on");
@@ -1063,8 +850,8 @@ void processBLECommands() {
         }
       }
 
-      if (wasteAndFillCharacteristic.written()) {
-        if (wasteAndFillCharacteristic.value()) {   // any value other than 0
+      if (refillCharacteristic.written()) {
+        if (refillCharacteristic.value()) {   // any value other than 0
           Serial.println("LED on");
 
         } else {                              // a 0 value
@@ -1120,42 +907,23 @@ void initializeBLE() {
 
   // set advertised local name and service UUID:
   BLE.setLocalName("DolphinControl");
-  //BLE.setAdvertisedService(dolphinLowLevelControlService);
-  ///BLE.setAdvertisedService(dolphinHighLevelControlService);
-  BLE.setAdvertisedService(dolphinAutomateControlService);
 
-  // add the characteristics to the service
-  dolphinLowLevelControlService.addCharacteristic(wastePumpCharacteristic);
-  dolphinLowLevelControlService.addCharacteristic(wasteSolenoidValveCharacteristic);
-  dolphinLowLevelControlService.addCharacteristic(fillPumpCharacteristic);
-  dolphinLowLevelControlService.addCharacteristic(fillSolenoidValveCharacteristic);
-  dolphinLowLevelControlService.addCharacteristic(septicSolenoidValveCharacteristic);
-  dolphinLowLevelControlService.addCharacteristic(septicDivertSolenoidValveCharacteristic);
+  BLE.setAdvertisedService(dolphinControlService);
 
-  dolphinHighLevelControlService.addCharacteristic(wasteCharacteristic);
-  dolphinHighLevelControlService.addCharacteristic(fillCharacteristic);
-  dolphinHighLevelControlService.addCharacteristic(waterLevelCharacteristic);
-
-  dolphinAutomateControlService.addCharacteristic(wasteAndFillCharacteristic);
+  
+  dolphinControlService.addCharacteristic(wasteCharacteristic);
+  dolphinControlService.addCharacteristic(fillCharacteristic);
+  dolphinControlService.addCharacteristic(waterLevelCharacteristic);
+  dolphinControlService.addCharacteristic(refillCharacteristic);
 
   // add services
-  BLE.addService(dolphinLowLevelControlService);
-  BLE.addService(dolphinHighLevelControlService);
-  BLE.addService(dolphinAutomateControlService);
+  BLE.addService(dolphinControlService);
 
   // set the initial values for the characeristics:
-  wastePumpCharacteristic.writeValue(0);
-  wasteSolenoidValveCharacteristic.writeValue(0);
-  fillPumpCharacteristic.writeValue(0);
-  fillSolenoidValveCharacteristic.writeValue(0);
-  septicSolenoidValveCharacteristic.writeValue(0);
-  septicDivertSolenoidValveCharacteristic.writeValue(0);
-
   wasteCharacteristic.writeValue(0);
   fillCharacteristic.writeValue(0);
   waterLevelCharacteristic.writeValue(0);
-
-  wasteAndFillCharacteristic.writeValue(0);
+  refillCharacteristic.writeValue(0);
 
   // start advertising
   BLE.advertise();
