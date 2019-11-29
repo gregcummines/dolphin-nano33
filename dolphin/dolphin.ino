@@ -80,10 +80,6 @@ volatile boolean downButtonPressed = false;
 volatile boolean selectButtonPressed = false;
 volatile boolean displayMenu = false;
 
-int downButtonState = 0;
-int upButtonState = 0;
-int selectButtonState = 0;
-int displayMenuButtonState = 0;
 int lastDownButtonState = 0;
 int lastSelectButtonState = 0;
 int lastUpButtonState = 0;
@@ -670,15 +666,15 @@ float readTemperatureInFahrenheit(byte address[8]) {
 }
 
 void processControlButtonCommands() {
-  downButtonState = digitalRead(2);
-  selectButtonState = digitalRead(1);
-  upButtonState =   digitalRead(0);
-  displayMenuButtonState = digitalRead(3);
+  int downButtonState = digitalRead(2);
+  int selectButtonState = digitalRead(1);
+  int upButtonState =   digitalRead(0);
+  int displayMenuButtonState = digitalRead(3);
 
-  checkIfDownButtonIsPressed();
-  checkIfUpButtonIsPressed();
-  checkIfSelectButtonIsPressed();
-  checkIfDisplayMenuButtonIsPressed();
+  checkIfDownButtonIsPressed(downButtonState);
+  checkIfUpButtonIsPressed(upButtonState);
+  checkIfSelectButtonIsPressed(selectButtonState);
+  checkIfDisplayMenuButtonIsPressed(displayMenuButtonState);
 
   if (upButtonPressed) {
     upButtonPressed = false;
@@ -945,15 +941,13 @@ void initializeGpioExpander() {
   delay(10);
 }
 
-void checkIfDisplayMenuButtonIsPressed()
+void checkIfDisplayMenuButtonIsPressed(int displayMenuButtonState)
 {
   if (displayMenuButtonState != lastDisplayMenuButtonState)
   {
     lastDisplayMenuButtonState = displayMenuButtonState;
     if (displayMenuButtonState == 0)
     {
-      //Serial.println("Menu button pressed");
-
       displayMenu = !displayMenu;
       if (displayMenu) {
         // re-initialize the menu anytime we enter
@@ -968,7 +962,7 @@ void checkIfDisplayMenuButtonIsPressed()
   }
 }
 
-void checkIfDownButtonIsPressed()
+void checkIfDownButtonIsPressed(int downButtonState)
 {
   if (downButtonState != lastDownButtonState)
   {
@@ -983,7 +977,7 @@ void checkIfDownButtonIsPressed()
   }
 }
 
-void checkIfUpButtonIsPressed()
+void checkIfUpButtonIsPressed(int upButtonState)
 {
   if (upButtonState != lastUpButtonState)
   {
@@ -1032,7 +1026,7 @@ void processLowWaterLevel() {
   
 }
 
-void checkIfSelectButtonIsPressed()
+void checkIfSelectButtonIsPressed(int selectButtonState)
 {
   if (selectButtonState != lastSelectButtonState)
   {
