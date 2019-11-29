@@ -211,15 +211,9 @@ void setup() {
 }
 
 void loop() {
-  processBLECommands();
-  internalLoop();
-}
-
-// This is the main internal loop and is called either when central is connected or not
-// It is CRITICAL that all functions in this loop execute FAST (< 200mS)
-void internalLoop() {
   processSolenoidAndPumpCommands();
   processControlButtonCommands();
+  processBLECommands();
   startTempConversion();
   readTempSensorsAfterConversion();
   processDHT31Sensor();
@@ -817,55 +811,35 @@ int getMenuIndexById(int id) {
 }
 
 void processBLECommands() {
-  // listen for BLE peripherals to connect:
   BLEDevice central = BLE.central();
 
   // if a central is connected to peripheral:
-  if (central) {
-    Serial.print("Connected to central: ");
+  if (central && central.connected()) {
 
-    // print the central's MAC address:
-    Serial.println(central.address());
-
-    // while the central is still connected to peripheral:
-    while (central.connected()) {
-      
-      if (wasteCharacteristic.written()) {
-        if (wasteCharacteristic.value()) {   // any value other than 0
-          Serial.println("4 on");
-
-        } else {
-          Serial.println(F("4 off"));
-
-        }
+    if (wasteCharacteristic.written()) {
+      if (wasteCharacteristic.value()) {   // any value other than 0
+        Serial.println("4 on");
+      } else {
+        Serial.println(F("4 off"));
       }
-
-      if (fillCharacteristic.written()) {
-        if (fillCharacteristic.value()) {   // any value other than 0
-          Serial.println("5 on");
-
-        } else {
-          Serial.println(F("5 off"));
-
-        }
-      }
-
-      if (refillCharacteristic.written()) {
-        if (refillCharacteristic.value()) {   // any value other than 0
-          Serial.println("LED on");
-
-        } else {                              // a 0 value
-          Serial.println(F("LED off"));
-
-        }
-      }
-
-      internalLoop();
     }
 
-    // when the central disconnects, print it out:
-    Serial.print(F("Disconnected from central: "));
-    Serial.println(central.address());
+    if (fillCharacteristic.written()) {
+      if (fillCharacteristic.value()) {   // any value other than 0
+        Serial.println("5 on");
+      } else {
+        Serial.println(F("5 off"));
+      }
+    }
+
+    if (refillCharacteristic.written()) {
+      if (refillCharacteristic.value()) {   // any value other than 0
+        Serial.println("LED on");
+      } else {                              // a 0 value
+        Serial.println(F("LED off"));
+
+      }
+    }
   } // if (central)
 }
 
