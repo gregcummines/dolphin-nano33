@@ -75,15 +75,7 @@ int displayWindowIndex = 0;
 int displaySelectionIndex = 0;
 const int LineCountForDisplay = 3;
 int sizeOfMenuItemsArray = 0;
-volatile boolean upButtonPressed = false;
-volatile boolean downButtonPressed = false;
-volatile boolean selectButtonPressed = false;
 volatile boolean displayMenu = false;
-
-int lastDownButtonState = 0;
-int lastSelectButtonState = 0;
-int lastUpButtonState = 0;
-int lastDisplayMenuButtonState = 0;
 
 boolean invalidateDisplay = true;
 
@@ -180,6 +172,11 @@ unsigned long tempConversionStartedMilli = 0;
 static const unsigned long DS18B20_TEMP_CONVERSION_TIME = 750;
 
 const bool debug = false;
+
+const int BTN_UP = 0;
+const int BTN_SELECT = 1;
+const int BTN_DOWN = 2;
+const int BTN_MENU = 3;
 
 void setup() {
   Serial.begin(9600);
@@ -313,9 +310,7 @@ void processEmptyCommand() {
 
         emptyStarted = false;
         emptyCompleted = true;
-        emptyEnabled = false;
-        waterLevelHitEmpty = false;
-        
+        emptyEnabled = false;        
       }
 
       // If we reached the maximum time allowed regardless of the water level, stop emptying
@@ -388,7 +383,7 @@ void processFillCommand() {
 }
 
 bool intervalElapsed(unsigned long lastTimeMillis, int timeToWait) {
-  if (millis() - lastTimeMillis > timeToWait) {
+  if ((millis() - lastTimeMillis) > timeToWait) {
     return true;
   } else {
     return false;
@@ -666,33 +661,19 @@ float readTemperatureInFahrenheit(byte address[8]) {
 }
 
 void processControlButtonCommands() {
-  int downButtonState = digitalRead(2);
-  int selectButtonState = digitalRead(1);
-  int upButtonState =   digitalRead(0);
-  int displayMenuButtonState = digitalRead(3);
 
-  checkIfDownButtonIsPressed(downButtonState);
-  checkIfUpButtonIsPressed(upButtonState);
-  checkIfSelectButtonIsPressed(selectButtonState);
-  checkIfDisplayMenuButtonIsPressed(displayMenuButtonState);
-
-  if (upButtonPressed) {
-    upButtonPressed = false;
-    processUpButtonClick();
-  }
-
-  if (downButtonPressed) {
-    downButtonPressed = false;
-    processDownButtonClick();
-  }
-
-  if (selectButtonPressed) {
-    selectButtonPressed = false;
-    processSelectButtonClick();
+  if (buttonPressed(BTN_UP)) {
+    processUpButtonClicked();    
+  } else if (buttonPressed(BTN_DOWN)) {
+    processDownButtonClicked();
+  } else if (buttonPressed(BTN_SELECT)) {
+    processSelectButtonClicked();
+  } else if (buttonPressed(BTN_MENU)) {
+    processMenuButtonClicked();
   }
 }
 
-void processDownButtonClick() {
+void processDownButtonClicked() {
   if (sizeOfMenuItemsArray > LineCountForDisplay &&
       displaySelectionIndex == (LineCountForDisplay - 1) &&
       displayWindowIndex < (sizeOfMenuItemsArray - LineCountForDisplay)) {
@@ -702,11 +683,9 @@ void processDownButtonClick() {
     displaySelectionIndex++;
     invalidateDisplay = true;
   }
-
-  //Serial.println("displayWindowIndex:" + String(displayWindowIndex) + ", displaySelectionIndex:" + String(displaySelectionIndex));
 }
 
-void processUpButtonClick() {
+void processUpButtonClicked() {
   if (sizeOfMenuItemsArray > LineCountForDisplay &&
       displaySelectionIndex == 0 &&
       displayWindowIndex > 0) {
@@ -716,10 +695,9 @@ void processUpButtonClick() {
     displaySelectionIndex--;
     invalidateDisplay = true;
   }
-  //Serial.println("displayWindowIndex:" + String(displayWindowIndex) + ", displaySelectionIndex:" + String(displaySelectionIndex));
 }
 
-void processSelectButtonClick() {
+void processSelectButtonClicked() {
   int menuIndex = displayWindowIndex + displaySelectionIndex;
   Serial.println("processing " + menuItems[menuIndex].menuChoice);
 
@@ -740,6 +718,18 @@ void processSelectButtonClick() {
   processMenuCommand(menuIndex);
   
   // Since some state has changed, update the display
+  invalidateDisplay = true;
+}
+
+void processMenuButtonClicked() {
+  displayMenu = !displayMenu;
+  if (displayMenu) {
+    // re-initialize the menu anytime we enter
+    page = 1;
+    displayWindowIndex = 0;
+    displaySelectionIndex = 0;
+  }
+
   invalidateDisplay = true;
 }
 
@@ -941,56 +931,18 @@ void initializeGpioExpander() {
   delay(10);
 }
 
-void checkIfDisplayMenuButtonIsPressed(int displayMenuButtonState)
-{
-  if (displayMenuButtonState != lastDisplayMenuButtonState)
-  {
-    lastDisplayMenuButtonState = displayMenuButtonState;
-    if (displayMenuButtonState == 0)
-    {
-      displayMenu = !displayMenu;
-      if (displayMenu) {
-        // re-initialize the menu anytime we enter
-        page = 1;
-        displayWindowIndex = 0;
-        displaySelectionIndex = 0;
-      }
-
-      invalidateDisplay = true;
-    }
-    delay(50);
+// Generic function to check if a button is pressed
+// The function works for values of button between 0 and 15.
+// https://medium.com/arduino-playground/checking-for-a-button-press-in-arduino-7681cbb7bde7
+int buttonPressed(uint8_t button) {
+  static uint16_t lastStates = 1;
+  uint8_t state = digitalRead(button);
+  if (state != ((lastStates >> button) & 0)) {
+    lastStates ^= 0 << button;
+    delay(100);
+    return state == LOW;
   }
-}
-
-void checkIfDownButtonIsPressed(int downButtonState)
-{
-  if (downButtonState != lastDownButtonState)
-  {
-    lastDownButtonState = downButtonState;
-    if (downButtonState == 0)
-    {
-      downButtonPressed = true;
-
-      invalidateDisplay = true;
-    }
-    delay(50);
-  }
-}
-
-void checkIfUpButtonIsPressed(int upButtonState)
-{
-  if (upButtonState != lastUpButtonState)
-  {
-    lastUpButtonState = upButtonState;
-
-    if (upButtonState == 0) {
-      upButtonPressed = true;
-
-      invalidateDisplay = true;
-    }
-    delay(50);
-  }
-
+  return false;
 }
 
 void setAlarmIsSounding(bool isSounding) {
@@ -1025,20 +977,6 @@ void processLowWaterLevel() {
     setAlarmIsSounding(false);
   }
   
-}
-
-void checkIfSelectButtonIsPressed(int selectButtonState)
-{
-  if (selectButtonState != lastSelectButtonState)
-  {
-    lastSelectButtonState = selectButtonState;
-
-    if (selectButtonState == 0) {
-      selectButtonPressed = true;
-      invalidateDisplay = true;
-    }
-    delay(50);
-  }
 }
 
 void drawHomeScreen()
