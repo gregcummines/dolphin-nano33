@@ -100,20 +100,20 @@ BLEBoolCharacteristic waterLevelCharacteristic("4B28FA64-2D6C-4BE5-A11F-BEE8E83F
 // Automate Waste and Fill (refill)
 BLEBoolCharacteristic refillCharacteristic("AC3F15EB-DE6C-4938-AA89-F89BCE3647A2", BLERead | BLEWrite | BLENotify);
 
-bool emptyTrigger = false;
+bool emptyEnabled = false;
 bool emptyStarted = false;
 unsigned long emptyLoopCheckLevelMilli;
 unsigned long emptyLoopHitZeroMilli;
 unsigned long emptyLoopCheckTimeoutMilli;
-bool waterLevelHitEmptyTrigger = false;
+bool waterLevelHitemptyEnabled = false;
 bool emptyCompleted = false;
 
-bool fillTrigger = false;
+bool fillEnabled = false;
 bool fillStarted = false;
 unsigned long fillLoopCheckMilli;
 unsigned long fillLoopStopMilli;
 
-bool refillTrigger = false;
+bool refillEnabled = false;
 
 unsigned long waterLevelLastReadMilli;
 // Amount of time to check the water level again to avoid glitches
@@ -121,7 +121,6 @@ unsigned long waterLevelLastReadMilli;
 // to once every time period
 static const unsigned long WATER_LEVEL_GLITCH_STABILIZER_INTERVAL = 500;
 
-bool isSystemBusy = false;
 bool cancel = false;
 bool testModeEnabled = false;
 
@@ -227,12 +226,11 @@ void resetPumpsAndSolenoids() {
   turnOffDivertBackToNutrientTankValve();
 
   // Reset all action flags
-  emptyTrigger = false;
+  emptyEnabled = false;
   emptyStarted = false;
   fillStarted = false;
-  fillTrigger = false;
-  refillTrigger = false;
-  isSystemBusy = false;
+  fillEnabled = false;
+  refillEnabled = false;
   cancel = false;
 }
 
@@ -253,21 +251,20 @@ void processEmptyCommand() {
   // If the empty trigger was set (by a button click, BLE command, etc.)
   // Note: Once the empty trigger is set, it will remain set until complete so that
   // other loop operations can check status and make sure it is completed.
-  if (emptyTrigger || refillTrigger) {
+  if ((emptyEnabled || refillEnabled) && !fillEnabled) {
     // Start the empty cycle if the system is not performing another operation
-    if (!emptyStarted && !isSystemBusy) {
+    if (!emptyStarted) {
 
       Serial.println("Empty cycle started at " + String(millis()));
 
       // Prevent other operations from occurring, except cancel
-      isSystemBusy = true;
       emptyStarted = true;
       emptyCompleted = false;
-      waterLevelHitEmptyTrigger = false;
+      waterLevelHitemptyEnabled = false;
 
-      if (emptyTrigger) {
+      if (emptyEnabled) {
         updateMenuState(MenuId_Drain, 1);
-      } else if (refillTrigger) {
+      } else if (refillEnabled) {
         updateMenuState(MenuId_Refill, 1);
       }
 
@@ -286,7 +283,7 @@ void processEmptyCommand() {
       // Empty cycle is running, so check status...
 
       // Check empty status every second if we have not already detected empty
-      if ((millis() - emptyLoopCheckLevelMilli > 1000) && !waterLevelHitEmptyTrigger && emptyStarted) {
+      if (intervalElapsed(emptyLoopCheckLevelMilli, 1000) && !waterLevelHitemptyEnabled && emptyStarted) {
         emptyLoopCheckLevelMilli = millis();
 
         //Serial.println("Checking empty status...");
@@ -298,7 +295,7 @@ void processEmptyCommand() {
           // We are setting the flag so if it registers not empty next time
           // we are still treating the trigger as an empty from now on each
           // time loop gets called
-          waterLevelHitEmptyTrigger = true;
+          waterLevelHitemptyEnabled = true;
           // We detected water level as empty, so set a time variable that we can use to
           // keep the pump running just a little longer to empty the tank
           emptyLoopHitZeroMilli = millis();
@@ -307,32 +304,30 @@ void processEmptyCommand() {
 
       // If we detect a water level of 0, wait a little longer before shutting pump/solenoid valve off
       // because we may not be completely empty yet.
-      if (waterLevelHitEmptyTrigger && emptyStarted && (millis() - emptyLoopHitZeroMilli > TimeToWaitAfterHitZero)) {
+      if (waterLevelHitemptyEnabled && emptyStarted && (intervalElapsed(emptyLoopHitZeroMilli, TimeToWaitAfterHitZero))) {
         Serial.println("Timeout after water level 0 has been set, ending empty cycle...");
         turnOffAllOutPumpAndSolenoidValves();
 
-        if (emptyTrigger) {
+        if (emptyEnabled) {
           updateMenuState(MenuId_Drain, 0);
         } 
 
         emptyStarted = false;
         emptyCompleted = true;
-        emptyTrigger = false;
-        isSystemBusy = false;
-        waterLevelHitEmptyTrigger = false;
+        emptyEnabled = false;
+        waterLevelHitemptyEnabled = false;
         
       }
 
       // If we reached the maximum time allowed regardless of the water level, stop emptying
-      if (((millis() - emptyLoopCheckTimeoutMilli) > timeToWaitForWasteEmpty) &&
+      if (intervalElapsed(emptyLoopCheckTimeoutMilli, timeToWaitForWasteEmpty) &&
           emptyStarted) {
         Serial.println("Max timeout has occurred, ending empty cycle...");
         turnOffAllOutPumpAndSolenoidValves();
 
         emptyStarted = false;
         emptyCompleted = true;
-        emptyTrigger = false;
-        isSystemBusy = false;
+        emptyEnabled = false;
 
         updateMenuState(MenuId_Drain, 0);
       }
@@ -344,20 +339,19 @@ void processFillCommand() {
   // If the fill trigger was set (by a button click, BLE command, etc.)
   // Note: Once the fill trigger is set, it will remain set until complete so that
   // other loop operations can check status and make sure it is completed.
-  if (fillTrigger || (refillTrigger && emptyCompleted)) {
-    if (!fillStarted && !isSystemBusy) {
+  if ((fillEnabled || (refillEnabled && emptyCompleted)) && !emptyEnabled) {
+    if (!fillStarted) {
       // Start the fill cycle
       Serial.println("Fill started at " + String(millis()));
       fillStarted = true;
-      isSystemBusy = true;
 
       // even though the empty process turns off pumps and solenoids, make one last
       // effort here just in case something went wrong
       turnOffAllOutPumpAndSolenoidValves();
 
-      if (fillTrigger) {
+      if (fillEnabled) {
         updateMenuState(MenuId_Fill, 1);
-      } else if (refillTrigger) {
+      } else if (refillEnabled) {
         updateMenuState(MenuId_Refill, 1);
       }
 
@@ -371,27 +365,34 @@ void processFillCommand() {
     } else {
       // Fill cycle has started, check for completion
 
-      // Check fill status every 100 mS
-      if (millis() - fillLoopCheckMilli > 1000) {
+      // Check fill status every 1000 mS
+      if (intervalElapsed(fillLoopCheckMilli, 1000)) {
         fillLoopCheckMilli = millis();
 
         // If the system is full or a max timeout has occurred, stop the cycle
-        if (waterLevel == TargetLevelFull || (millis() - fillLoopStopMilli > timeToWaitForNutrientFill)) {
+        if (waterLevel == TargetLevelFull || intervalElapsed(fillLoopStopMilli, timeToWaitForNutrientFill)) {
           turnOffInPumpAndSolenoidValve();
 
-          if (fillTrigger) {
+          if (fillEnabled) {
             updateMenuState(MenuId_Fill, 0);
-          } else if (refillTrigger) {
+          } else if (refillEnabled) {
             updateMenuState(MenuId_Refill, 0);
           }
 
           fillStarted = false;
-          fillTrigger = false;
-          refillTrigger = false;
-          isSystemBusy = false;
+          fillEnabled = false;
+          refillEnabled = false;
         }
       }
     }
+  }
+}
+
+bool intervalElapsed(unsigned long lastTimeMillis, int timeToWait) {
+  if (millis() - lastTimeMillis > timeToWait) {
+    return true;
+  } else {
+    return false;
   }
 }
 
@@ -512,7 +513,7 @@ void turnOffDivertBackToNutrientTankValve() {
 
 void startTempConversion() {
   // Force a temperature sensor measurement every interval
-  if (millis() > lastTimeTempSensorsRead + REFRESH_INTERVAL_TEMP_SENSOR) {
+  if (intervalElapsed(lastTimeTempSensorsRead, REFRESH_INTERVAL_TEMP_SENSOR)) {
     lastTimeTempSensorsRead = millis();
 
     forceStartTempConversion();
@@ -521,7 +522,7 @@ void startTempConversion() {
 
 void processDHT31Sensor() {
   // Force a DHT31 sensor measurement every interval
-  if (millis() > lastTimeDHT31SensorRead + REFRESH_INTERVAL_DHT31_SENSOR) {
+  if (intervalElapsed(lastTimeDHT31SensorRead, REFRESH_INTERVAL_DHT31_SENSOR)) {
     lastTimeDHT31SensorRead = millis();
 
     forceProcessDHT31Sensor();
@@ -531,7 +532,7 @@ void processDHT31Sensor() {
 void processWaterLevelSensor() {
 
   // Force a water level sensor measurement every interval
-  if (millis() > lastTimeWaterLevelSensorRead + REFRESH_INTERVAL_WATER_LEVEL_SENSOR) {
+  if (intervalElapsed(lastTimeWaterLevelSensorRead, REFRESH_INTERVAL_WATER_LEVEL_SENSOR)) {
     lastTimeWaterLevelSensorRead = millis();
 
     forceProcessWaterLevelSensor();
@@ -558,7 +559,7 @@ void printDallasTempSensors() {
 void readTempSensorsAfterConversion() {
   // If the time period for the temperature sensors to convert
   // the temperature has gone by, we can now read the temperature sensors
-  if (millis() > tempConversionStartedMilli + DS18B20_TEMP_CONVERSION_TIME) {
+  if (intervalElapsed(tempConversionStartedMilli, DS18B20_TEMP_CONVERSION_TIME)) {
     
     temp1 = readTemperatureInFahrenheit(tempSensor1Address);
     temp2 = readTemperatureInFahrenheit(tempSensor2Address);
@@ -596,7 +597,7 @@ void forceProcessDHT31Sensor() {
 void forceProcessWaterLevelSensor() {
   // Only allow water level changes every interval to prevent glitches when
   // the water is on the threshold.
-  if (millis() > waterLevelLastReadMilli + WATER_LEVEL_GLITCH_STABILIZER_INTERVAL) {
+  if (intervalElapsed(waterLevelLastReadMilli, WATER_LEVEL_GLITCH_STABILIZER_INTERVAL)) {
 
     waterLevelLastReadMilli = millis();
 
@@ -748,7 +749,7 @@ void processMenuCommand(int menuIndex) {
   switch (menuItems[menuIndex].menuId) {
     case MenuId_Drain:
       if (menuItems[menuIndex].state == 0) {
-        emptyTrigger = true;
+        emptyEnabled = true;
         menuItems[menuIndex].state = 1;
       } else {
         cancel = true;
@@ -757,7 +758,7 @@ void processMenuCommand(int menuIndex) {
       break;
     case MenuId_Fill:
       if (menuItems[menuIndex].state == 0) {
-        fillTrigger = true;
+        fillEnabled = true;
         menuItems[menuIndex].state = 1;
       } else {
         cancel = true;
@@ -766,7 +767,7 @@ void processMenuCommand(int menuIndex) {
       break;
     case MenuId_Refill:
       if (menuItems[menuIndex].state == 0) {
-        refillTrigger = true;
+        refillEnabled = true;
         emptyCompleted = false;
         menuItems[menuIndex].state = 1;
       } else {
@@ -1005,7 +1006,7 @@ void setAlarmIsSounding(bool isSounding) {
 
 void processAlarm() {
   if (alarmIsSounding) {
-    if (millis() > lastTimeAlarmSignalOutputToggled + REFRESH_INTERVAL_ALARM_SIGNALOUTPUT_TOGGLE) {
+    if (intervalElapsed(lastTimeAlarmSignalOutputToggled, REFRESH_INTERVAL_ALARM_SIGNALOUTPUT_TOGGLE)) {
       lastTimeAlarmSignalOutputToggled = millis();
       if (alarmSignalOutputToggle) {
         gpioExpander.digitalWrite(0, HIGH);
@@ -1018,7 +1019,8 @@ void processAlarm() {
 }
 
 void processLowWaterLevel() {
-  if (!isSystemBusy && waterLevel <= 1) {
+  // Trigger a low water alarm only if we are not emptying or filling
+  if (!emptyEnabled && !fillEnabled && waterLevel <= 1) {
     setAlarmIsSounding(true);
   } else {
     setAlarmIsSounding(false);
