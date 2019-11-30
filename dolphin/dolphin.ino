@@ -105,7 +105,7 @@ bool emptyStarted = false;
 unsigned long emptyLoopCheckLevelMilli;
 unsigned long emptyLoopHitZeroMilli;
 unsigned long emptyLoopCheckTimeoutMilli;
-bool waterLevelHitemptyEnabled = false;
+bool waterLevelHitEmpty = false;
 bool emptyCompleted = false;
 
 bool fillEnabled = false;
@@ -257,10 +257,9 @@ void processEmptyCommand() {
 
       Serial.println("Empty cycle started at " + String(millis()));
 
-      // Prevent other operations from occurring, except cancel
       emptyStarted = true;
       emptyCompleted = false;
-      waterLevelHitemptyEnabled = false;
+      waterLevelHitEmpty = false;
 
       if (emptyEnabled) {
         updateMenuState(MenuId_Drain, 1);
@@ -283,7 +282,7 @@ void processEmptyCommand() {
       // Empty cycle is running, so check status...
 
       // Check empty status every second if we have not already detected empty
-      if (intervalElapsed(emptyLoopCheckLevelMilli, 1000) && !waterLevelHitemptyEnabled && emptyStarted) {
+      if (intervalElapsed(emptyLoopCheckLevelMilli, 1000) && !waterLevelHitEmpty && emptyStarted) {
         emptyLoopCheckLevelMilli = millis();
 
         //Serial.println("Checking empty status...");
@@ -295,7 +294,7 @@ void processEmptyCommand() {
           // We are setting the flag so if it registers not empty next time
           // we are still treating the trigger as an empty from now on each
           // time loop gets called
-          waterLevelHitemptyEnabled = true;
+          waterLevelHitEmpty = true;
           // We detected water level as empty, so set a time variable that we can use to
           // keep the pump running just a little longer to empty the tank
           emptyLoopHitZeroMilli = millis();
@@ -304,7 +303,7 @@ void processEmptyCommand() {
 
       // If we detect a water level of 0, wait a little longer before shutting pump/solenoid valve off
       // because we may not be completely empty yet.
-      if (waterLevelHitemptyEnabled && emptyStarted && (intervalElapsed(emptyLoopHitZeroMilli, TimeToWaitAfterHitZero))) {
+      if (waterLevelHitEmpty && emptyStarted && (intervalElapsed(emptyLoopHitZeroMilli, TimeToWaitAfterHitZero))) {
         Serial.println("Timeout after water level 0 has been set, ending empty cycle...");
         turnOffAllOutPumpAndSolenoidValves();
 
@@ -315,7 +314,7 @@ void processEmptyCommand() {
         emptyStarted = false;
         emptyCompleted = true;
         emptyEnabled = false;
-        waterLevelHitemptyEnabled = false;
+        waterLevelHitEmpty = false;
         
       }
 
